@@ -9,7 +9,10 @@ jobs:
       matrix:
         include:
           - target: riscv64gc-unknown-linux-gnu
-            strip: llvm-strip
+            strip: riscv64-linux-gnu-strip
+            setup: |
+              sudo apt-get update
+              sudo apt-get install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu -y
 
     name: build-${{ matrix.target }}
     runs-on: ubuntu-latest
