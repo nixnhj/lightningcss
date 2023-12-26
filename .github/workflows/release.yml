@@ -112,14 +112,58 @@ jobs:
           - target: aarch64-unknown-linux-musl
             image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             strip: aarch64-linux-musl-strip
-          - target: x86_64-unknown-linux-musl
-            image: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            strip: strip
 
     name: build-${{ matrix.target }}
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Node.JS
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup cross compile toolchain
+        if: ${{ matrix.setup }}
+        run: ${{ matrix.setup }}
+
+      - name: Setup rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: bahmutov/npm-install@v1.8.32
+      - name: Build release
+        run: yarn build-release
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+      - name: Build CLI
+        run: |
+          yarn napi build --bin lightningcss --release --features cli --target ${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/lightningcss lightningcss
+      - name: Strip debug symbols # https://github.com/rust-lang/rust/issues/46034
+        if: ${{ matrix.strip }}
+        run: ${{ matrix.strip }} *.node lightningcss
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: bindings-${{ matrix.target }}
+          path: |
+            *.node
+            lightningcss
+
+  build-linux-no-container:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: riscv64gc-unknown-linux-gnu
+            strip: llvm-strip
+
+    name: build-${{ matrix.target }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -237,6 +281,7 @@ jobs:
     needs:
       - build
       - build-linux
+      - build-linux-no-container
       - build-apple-silicon
       - build-freebsd
       - build-wasm
